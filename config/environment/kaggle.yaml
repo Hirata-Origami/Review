@@ -1,0 +1,43 @@
+# @package _global_
+# Kaggle-specific configuration overrides
+
+# Hardware constraints for Kaggle
+hardware:
+  device: "cuda"
+  mixed_precision: true
+  use_flash_attention: false  # May not be available on Kaggle
+
+training:
+  # Adjusted for Kaggle GPU memory constraints
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 8
+  dataloader_num_workers: 2
+  
+  # More frequent checkpointing due to time limits
+  save_steps: 500
+  eval_steps: 250
+  logging_steps: 50
+
+model:
+  max_sequence_length: 1024  # Reduced for memory constraints
+
+data:
+  # Kaggle dataset paths
+  train_path: "/kaggle/input/spgispeech/train.csv.bz2"
+  val_path: "/kaggle/input/spgispeech/val.csv.bz2"
+
+output:
+  base_dir: "/kaggle/working/outputs"
+
+monitoring:
+  wandb:
+    enabled: false  # May have network restrictions
+  tensorboard:
+    enabled: true
+
+# Kaggle-specific optimizations
+kaggle:
+  time_limit_hours: 12
+  auto_save_interval: 3600  # seconds
+  compressed_checkpoints: true

@@ -1,0 +1,186 @@
+# Financial Domain LLM Fine-tuning Configuration
+# Enterprise-grade configuration for SPGISpeech domain adaptation
+
+# Project metadata
+project:
+  name: "financial-llm-finetune"
+  version: "1.0.0"
+  description: "Fine-tuning Llama-3 8B for financial domain understanding using SPGISpeech dataset"
+  author: "Bharath Pranav S"
+
+# Model configuration
+model:
+  base_model: "unsloth/Meta-Llama-3-8B-bnb-4bit"
+  model_family: "llama3"
+  max_sequence_length: 2048
+  quantization:
+    enabled: true
+    bits: 4
+    compute_dtype: "float16"
+  
+  # LoRA/QLoRA parameters
+  lora:
+    rank: 16
+    alpha: 32
+    dropout: 0.1
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+# Training configuration
+training:
+  # Hyperparameters
+  num_epochs: 3
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  
+  # Batch configuration
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+  eval_accumulation_steps: 1
+  
+  # Optimization
+  gradient_checkpointing: true
+  fp16: true
+  bf16: false
+  dataloader_num_workers: 4
+  remove_unused_columns: false
+  
+  # Evaluation and saving
+  evaluation_strategy: "steps"
+  eval_steps: 500
+  save_strategy: "steps"
+  save_steps: 1000
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  
+  # Logging
+  logging_steps: 100
+  logging_strategy: "steps"
+  report_to: ["wandb", "tensorboard"]
+
+# Data configuration
+data:
+  # Dataset paths (can be overridden by environment variables)
+  train_path: "${oc.env:TRAIN_CSV_PATH,./Train dataset.csv}"
+  val_path: "${oc.env:VAL_CSV_PATH,./Val dataset.csv}"
+  
+  # Data processing
+  max_samples: null  # null for full dataset
+  random_seed: 42
+  test_size: 0.1
+  
+  # Text preprocessing
+  preprocessing:
+    lowercase: false
+    remove_special_chars: false
+    normalize_whitespace: true
+    max_transcript_length: 1024
+    min_transcript_length: 10
+
+# Instruction formatting
+instruction:
+  templates:
+    financial_understanding: "Analyze the following business call transcript and provide key insights about the financial discussion:\n\n{transcript}\n\nKey insights:"
+    transcription_completion: "Complete this business call transcript:\n\n{partial_transcript}"
+    content_summarization: "Summarize the key points from this financial call excerpt:\n\n{transcript}\n\nSummary:"
+    qa_generation: "Based on this financial call transcript, what questions might investors ask?\n\n{transcript}\n\nPotential questions:"
+  
+  default_template: "financial_understanding"
+  use_multiple_templates: true
+  template_weights:
+    financial_understanding: 0.4
+    transcription_completion: 0.3
+    content_summarization: 0.2
+    qa_generation: 0.1
+
+# Evaluation configuration
+evaluation:
+  metrics:
+    - "perplexity"
+    - "rouge"
+    - "bert_score"
+    - "bleu"
+    - "word_overlap"
+    - "semantic_similarity"
+  
+  # Sample sizes for different evaluation types
+  quick_eval_samples: 100
+  full_eval_samples: 1000
+  qualitative_eval_samples: 20
+  
+  # Evaluation parameters
+  generation:
+    max_new_tokens: 256
+    temperature: 0.7
+    top_p: 0.9
+    do_sample: true
+    repetition_penalty: 1.1
+
+# Output and storage
+output:
+  base_dir: "./outputs"
+  model_dir: "${output.base_dir}/models"
+  logs_dir: "${output.base_dir}/logs"
+  results_dir: "${output.base_dir}/results"
+  checkpoints_dir: "${output.base_dir}/checkpoints"
+
+# Hardware optimization
+hardware:
+  device: "auto"  # auto, cuda, cpu
+  mixed_precision: true
+  compile_model: false  # PyTorch 2.0 compilation
+  use_flash_attention: true
+  
+  # Memory optimization
+  memory_optimization:
+    gradient_checkpointing: true
+    pin_memory: true
+    empty_cache_steps: 100
+
+# Monitoring and debugging
+monitoring:
+  wandb:
+    project: "financial-llm-finetune"
+    entity: null  # Set your wandb entity
+    tags: ["llama3", "financial", "spgispeech"]
+  
+  tensorboard:
+    log_dir: "${output.logs_dir}/tensorboard"
+  
+  # Debug settings
+  debug:
+    enabled: false
+    profile_memory: false
+    detect_anomaly: false
+    log_model_architecture: true
+
+# Export configuration
+export:
+  formats: ["huggingface", "gguf", "onnx"]
+  push_to_hub: false
+  hub_model_id: null
+  private: true
+  
+  # Quantization for deployment
+  deployment_quantization:
+    int8: true
+    int4: true
+
+# Environment-specific overrides
+defaults:
+  - _self_
+  - environment: local  # local, kaggle, colab, production
+
+# Hydra configuration
+hydra:
+  run:
+    dir: ${output.base_dir}/hydra_runs/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: ${output.base_dir}/hydra_sweeps
+    subdir: ${hydra.job.num}

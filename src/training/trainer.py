@@ -22,6 +22,7 @@ from transformers import (
     EarlyStoppingCallback,
     get_scheduler
 )
+import inspect
 from transformers.trainer_callback import TrainerCallback, TrainerState, TrainerControl
 from transformers.training_args import OptimizerNames
 import wandb
@@ -222,8 +223,8 @@ class FinancialLLMTrainer:
         )
         total_steps = steps_per_epoch * self.config.num_epochs
         
-        # Determine eval steps
-        eval_steps = min(self.config.eval_steps, steps_per_epoch // 2)
+        # Determine eval steps (ensure at least 1)
+        eval_steps = max(1, min(self.config.eval_steps, max(1, steps_per_epoch // 2)))
         
         # Setup report_to
         report_to = []
@@ -231,66 +232,92 @@ class FinancialLLMTrainer:
             report_to.append("wandb")
         report_to.append("tensorboard")
         
-        self.training_args = TrainingArguments(
+        # Build arguments with compatibility across transformers versions
+        args_kwargs = {
             # Basic settings
-            output_dir=str(self.output_dir),
-            overwrite_output_dir=True,
-            
+            "output_dir": str(self.output_dir),
+            "overwrite_output_dir": True,
+
             # Training hyperparameters
-            num_train_epochs=self.config.num_epochs,
-            learning_rate=self.config.learning_rate,
-            weight_decay=self.config.weight_decay,
-            warmup_ratio=self.config.warmup_ratio,
-            lr_scheduler_type=self.config.lr_scheduler_type,
-            
+            "num_train_epochs": self.config.num_epochs,
+            "learning_rate": self.config.learning_rate,
+            "weight_decay": self.config.weight_decay,
+            "warmup_ratio": self.config.warmup_ratio,
+            "lr_scheduler_type": self.config.lr_scheduler_type,
+
             # Batch settings
-            per_device_train_batch_size=self.config.per_device_train_batch_size,
-            per_device_eval_batch_size=self.config.per_device_eval_batch_size,
-            gradient_accumulation_steps=self.config.gradient_accumulation_steps,
-            
+            "per_device_train_batch_size": self.config.per_device_train_batch_size,
+            "per_device_eval_batch_size": self.config.per_device_eval_batch_size,
+            "gradient_accumulation_steps": self.config.gradient_accumulation_steps,
+
             # Optimization settings
-            gradient_checkpointing=self.config.gradient_checkpointing,
-            fp16=self.config.fp16,
-            bf16=self.config.bf16,
-            optim="adamw_torch",
-            adam_beta1=0.9,
-            adam_beta2=0.999,
-            adam_epsilon=1e-8,
-            max_grad_norm=1.0,
-            
+            "gradient_checkpointing": self.config.gradient_checkpointing,
+            "fp16": self.config.fp16,
+            "bf16": self.config.bf16,
+            # Prefer 8-bit optimizer on CUDA+bitsandbytes for T4 memory efficiency
+            "optim": self.config.optim,
+            "adam_beta1": 0.9,
+            "adam_beta2": 0.999,
+            "adam_epsilon": 1e-8,
+            "max_grad_norm": 1.0,
+
             # Evaluation and saving
-            evaluation_strategy=self.config.evaluation_strategy,
-            eval_steps=eval_steps,
-            save_strategy=self.config.save_strategy,
-            save_steps=self.config.save_steps,
-            save_total_limit=self.config.save_total_limit,
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
-            
+            "eval_steps": eval_steps,
+            "save_strategy": self.config.save_strategy,
+            "save_steps": self.config.save_steps,
+            "save_total_limit": self.config.save_total_limit,
+            "load_best_model_at_end": True,
+            "metric_for_best_model": "eval_loss",
+            "greater_is_better": False,
+
             # Logging
-            logging_strategy="steps",
-            logging_steps=self.config.logging_steps,
-            logging_first_step=True,
-            report_to=report_to,
-            
+            "logging_strategy": "steps",
+            "logging_steps": self.config.logging_steps,
+            "logging_first_step": True,
+            "report_to": report_to,
+
             # Performance
-            dataloader_num_workers=4,
-            dataloader_pin_memory=True,
-            remove_unused_columns=False,
-            
+            "dataloader_num_workers": self.config.dataloader_num_workers,
+            "dataloader_pin_memory": self.config.dataloader_pin_memory,
+            "remove_unused_columns": self.config.remove_unused_columns,
+            "eval_accumulation_steps": self.config.eval_accumulation_steps,
+
             # Stability
-            seed=42,
-            data_seed=42,
-            
+            "seed": 42,
+            "data_seed": 42,
+
             # Advanced settings
-            ddp_find_unused_parameters=False,
-            group_by_length=True,
-            length_column_name="length",
-            
+            "ddp_find_unused_parameters": False,
+            "group_by_length": True,
+            # Avoid forcing a custom length column; let transformers infer
+            # "length_column_name": "length",
+
             # Tensorboard settings
-            logging_dir=str(self.output_dir / "logs"),
-        )
+            "logging_dir": str(self.output_dir / "logs"),
+        }
+
+        # Detect whether the current TrainingArguments accepts 'evaluation_strategy' or 'eval_strategy'
+        ta_init_params = list(inspect.signature(TrainingArguments.__init__).parameters.keys())
+        if "evaluation_strategy" in ta_init_params:
+            args_kwargs["evaluation_strategy"] = self.config.evaluation_strategy
+        elif "eval_strategy" in ta_init_params:
+            args_kwargs["eval_strategy"] = self.config.evaluation_strategy
+        else:
+            # Fallback: disable evaluation scheduling; the Trainer can still evaluate when called explicitly
+            args_kwargs.pop("eval_steps", None)
+
+        # If CUDA + bitsandbytes present, switch optimizer to adamw_bnb_8bit
+        try:
+            import bitsandbytes as _bnb  # noqa: F401
+            if torch.cuda.is_available():
+                args_kwargs["optim"] = "adamw_bnb_8bit"
+        except Exception:
+            pass
+
+        # Filter out any kwargs not accepted by this transformers version
+        filtered_kwargs = {k: v for k, v in args_kwargs.items() if k in ta_init_params}
+
+        self.training_args = TrainingArguments(**filtered_kwargs)
         
         logger.info(f"Training arguments configured for {total_steps} total steps")
         return self.training_args

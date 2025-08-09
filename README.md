@@ -64,6 +64,9 @@ python main.py --environment local --wandb-project financial-llm-demo
 
 # Kaggle environment (optimized for resource constraints)
 python main.py --environment kaggle
+
+# Mac M1 Pro environment (optimized for Apple Silicon)
+python main.py --environment mac_m1
 ```
 
 ### 4. Expected Results
@@ -93,10 +96,20 @@ After completion, you'll find:
 ### Environment Setup
 
 **Option 1: Conda (Recommended)**
+
+*For CUDA/Linux systems:*
 ```bash
 conda create -n financial-llm python=3.10
 conda activate financial-llm
 conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+pip install -r requirements.txt
+```
+
+*For Mac M1/M2 systems:*
+```bash
+conda create -n financial-llm python=3.10
+conda activate financial-llm
+conda install pytorch torchvision torchaudio -c pytorch
 pip install -r requirements.txt
 ```
 
@@ -226,7 +239,7 @@ project:
   version: "1.0.0"
 
 model:
-  base_model: "unsloth/Meta-Llama-3-8B-bnb-4bit"
+  base_model: "unsloth/llama-3-8b-bnb-4bit"
   max_sequence_length: 2048
   lora:
     rank: 16
@@ -369,6 +382,45 @@ def financial_accuracy_metric(predictions, references):
 # Add to evaluator
 evaluator.custom_metrics['financial_accuracy'] = financial_accuracy_metric
 ```
+
+## 🍎 Mac M1 Pro Specific Instructions
+
+### Setup for Apple Silicon
+
+```bash
+# Create conda environment
+conda create -n financial-llm python=3.10
+conda activate financial-llm
+
+# Install PyTorch for M1 (with MPS support)
+conda install pytorch torchvision torchaudio -c pytorch
+
+# Install other dependencies
+pip install -r requirements.txt
+
+# Verify MPS availability
+python -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
+
+# Run with M1 optimizations
+python main.py --environment mac_m1 --wandb-project financial-llm
+```
+
+### Mac M1 Pro Optimizations
+
+The framework automatically applies these optimizations when using `--environment mac_m1`:
+
+- **MPS Backend**: Uses Metal Performance Shaders for GPU acceleration
+- **Memory Optimization**: Reduced batch sizes optimized for 16GB unified memory
+- **Disabled Features**: Automatically disables Unsloth and quantization (not supported on MPS)
+- **Conservative Settings**: Smaller LoRA rank (8) and sequence length (1024) to prevent OOM
+- **Automatic Fallback**: CPU fallback for operations not supported on MPS
+
+### Expected Performance on Mac M1 Pro 16GB
+
+- **Training Speed**: ~2-3x slower than CUDA but much faster than CPU-only
+- **Memory Usage**: Efficiently uses unified memory architecture
+- **Model Size Limits**: Can handle up to 8B parameter models with LoRA
+- **Batch Size**: Optimized at 1 with gradient accumulation
 
 ## 🔧 Troubleshooting
 

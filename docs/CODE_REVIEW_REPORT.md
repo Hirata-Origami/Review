@@ -124,7 +124,7 @@ The framework implements a comprehensive financial domain LLM fine-tuning pipeli
 **Before:**
 ```python
 # Hardcoded configuration scattered throughout
-MODEL_ID = "unsloth/Meta-Llama-3-8B-bnb-4bit"
+MODEL_ID = "unsloth/llama-3-8b-bnb-4bit"
 BATCH_SIZE = 8 if DEVICE=="cuda" else 1
 MAX_LENGTH = 512
 ```
@@ -133,7 +133,7 @@ MAX_LENGTH = 512
 ```python
 @dataclass
 class ModelConfig:
-    base_model: str = "unsloth/Meta-Llama-3-8B-bnb-4bit"
+    base_model: str = "unsloth/llama-3-8b-bnb-4bit"
     max_sequence_length: int = 2048
     lora_rank: int = 16
     lora_alpha: int = 32

@@ -78,22 +78,42 @@ def test_configuration():
         # Add src to path
         sys.path.insert(0, str(Path(__file__).parent / "src"))
         
-        from src.core.config import ConfigManager
+        # Test basic imports first
+        try:
+            from src.core.config import ConfigManager
+            print("✓ ConfigManager import successful")
+        except Exception as e:
+            print(f"❌ ConfigManager import failed: {e}")
+            return False
         
-        # Test configuration loading
-        config_manager = ConfigManager(
-            config_path="config/config.yaml",
-            environment="local"
-        )
+        # Test minimal configuration loading without full initialization
+        try:
+            from omegaconf import OmegaConf
+            config = OmegaConf.load("config/config.yaml")
+            print("✓ Basic YAML loading works")
+            print(f"  - Model: {config.model.base_model}")
+        except Exception as e:
+            print(f"❌ YAML loading failed: {e}")
+            return False
         
-        print("✓ Configuration loaded successfully")
-        print(f"  - Model: {config_manager.config.model.base_model}")
-        print(f"  - Environment: {config_manager.environment}")
-        
-        return True
+        # Test full configuration manager (this might be where it hangs)
+        try:
+            print("  - Testing full ConfigManager initialization...")
+            config_manager = ConfigManager(
+                config_path="config/config.yaml",
+                environment="local"
+            )
+            print("✓ Configuration loaded successfully")
+            print(f"  - Environment: {config_manager.environment}")
+            return True
+        except Exception as e:
+            print(f"❌ Full configuration loading failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
         
     except Exception as e:
-        print(f"❌ Configuration loading failed: {e}")
+        print(f"❌ Configuration test failed: {e}")
         import traceback
         traceback.print_exc()
         return False

@@ -302,8 +302,8 @@ def initialize_logging(log_dir: Optional[Union[str, Path]] = None,
         structured_logging=structured_logging
     )
     
-    # Log system info
-    _logger_manager.log_system_info()
+    # Don't log system info during initialization to avoid hangs
+    # _logger_manager.log_system_info()
     
     return _logger_manager
 

@@ -155,7 +155,7 @@ project:
   version: "1.0.0"
 
 model:
-  base_model: "unsloth/Meta-Llama-3-8B-bnb-4bit"
+  base_model: "unsloth/llama-3-8b-bnb-4bit"
   max_sequence_length: 2048
   lora:
     rank: 16

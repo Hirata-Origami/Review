@@ -25,8 +25,19 @@ from peft import (
     prepare_model_for_kbit_training,
     PeftModel
 )
-from unsloth import FastLanguageModel
-import bitsandbytes as bnb
+try:
+    from unsloth import FastLanguageModel
+    UNSLOTH_AVAILABLE = True
+except (ImportError, AssertionError) as e:
+    UNSLOTH_AVAILABLE = False
+    FastLanguageModel = None
+
+try:
+    import bitsandbytes as bnb
+    BITSANDBYTES_AVAILABLE = True
+except ImportError:
+    BITSANDBYTES_AVAILABLE = False
+    bnb = None
 
 from ..core.config import ModelConfig
 from ..utils.logger import get_logger
@@ -98,11 +109,13 @@ class LlamaFinancialAdapter:
         logger.info(f"Loading base model: {self.config.base_model}")
         
         try:
-            if use_unsloth and self.device.type == "cuda":
+            if use_unsloth and self.device.type == "cuda" and UNSLOTH_AVAILABLE:
                 # Use Unsloth for optimal performance
                 model, tokenizer = self._load_with_unsloth()
             else:
                 # Fallback to standard HuggingFace loading
+                if use_unsloth and not UNSLOTH_AVAILABLE:
+                    logger.warning("Unsloth requested but not available, using transformers")
                 model, tokenizer = self._load_with_transformers()
             
             self.model = model
@@ -143,57 +156,97 @@ class LlamaFinancialAdapter:
     
     def _load_with_transformers(self) -> Tuple[nn.Module, AutoTokenizer]:
         """Load model using standard transformers library."""
+        logger.info(f"Loading model with transformers from: {self.config.base_model}")
+        
         # Configure quantization (only for CUDA)
         quantization_config = None
-        if self.config.quantization_enabled and self.device.type == "cuda":
+        if self.config.quantization_enabled and self.device.type == "cuda" and BITSANDBYTES_AVAILABLE:
+            logger.info("Setting up 4-bit quantization for CUDA device")
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=getattr(torch, self.config.compute_dtype, torch.float16),
             )
-        elif self.config.quantization_enabled and self.device.type != "cuda":
-            logger.warning("Quantization not supported on this device. Disabling quantization.")
+        elif self.config.quantization_enabled:
+            logger.warning("Quantization requested but not supported on this device or bitsandbytes not available. Disabling quantization.")
         
-        # Load tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.config.base_model,
-            trust_remote_code=True,
-            padding_side="right"
-        )
+        # Load tokenizer first
+        logger.info("Loading tokenizer...")
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                self.config.base_model,
+                trust_remote_code=True,
+                padding_side="right"
+            )
+            logger.info("✓ Tokenizer loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load tokenizer: {e}")
+            raise
         
         # Add pad token if missing
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.pad_token_id = tokenizer.eos_token_id
+            logger.info("Added missing pad token")
         
         # Determine device map and dtype based on device
         if self.device.type == "cuda":
             device_map = "auto"
             torch_dtype = getattr(torch, self.config.compute_dtype, torch.float16)
+            logger.info(f"Using CUDA with device_map='auto' and torch_dtype={torch_dtype}")
         elif self.device.type == "mps":
             device_map = None  # MPS doesn't support device_map="auto"
             torch_dtype = torch.float32  # MPS works better with float32
+            logger.info("Using MPS with manual device placement and float32")
         else:
             device_map = None
             torch_dtype = torch.float32
+            logger.info("Using CPU with manual device placement and float32")
         
-        # Load model
-        model = AutoModelForCausalLM.from_pretrained(
-            self.config.base_model,
-            quantization_config=quantization_config,
-            device_map=device_map,
-            trust_remote_code=True,
-            torch_dtype=torch_dtype,
-            attn_implementation="flash_attention_2" if self._supports_flash_attention() else None
-        )
+        # Load model with error handling
+        logger.info("Loading model...")
+        try:
+            # Simplified loading for Mac M1/MPS to avoid configuration issues
+            if self.device.type == "mps":
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.config.base_model,
+                    torch_dtype=torch_dtype,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True
+                )
+            else:
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.config.base_model,
+                    quantization_config=quantization_config,
+                    device_map=device_map,
+                    trust_remote_code=True,
+                    torch_dtype=torch_dtype,
+                    low_cpu_mem_usage=True
+                )
+            logger.info("✓ Model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load model: {e}")
+            logger.info("Attempting fallback model loading...")
+            
+            # Fallback: try without optional parameters
+            try:
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.config.base_model,
+                    torch_dtype=torch_dtype,
+                    trust_remote_code=True
+                )
+                logger.info("✓ Model loaded with fallback method")
+            except Exception as fallback_e:
+                logger.error(f"Fallback loading also failed: {fallback_e}")
+                raise
         
         # Move to device if not using device_map
         if device_map is None:
             model = model.to(self.device)
         
         # Prepare for k-bit training if quantized
-        if quantization_config:
+        if quantization_config and BITSANDBYTES_AVAILABLE:
             model = prepare_model_for_kbit_training(
                 model,
                 use_gradient_checkpointing=True

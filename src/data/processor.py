@@ -207,6 +207,10 @@ class FinancialDataProcessor:
         
         logger.info(f"Initialized FinancialDataProcessor with {len(self.templates)} templates")
     
+    def set_tokenizer(self, tokenizer: PreTrainedTokenizer) -> None:
+        """Attach or update the tokenizer after initialization."""
+        self.tokenizer = tokenizer
+    
     def process_dataset(self, train_path: str, val_path: str) -> Tuple[DatasetDict, DataStatistics]:
         """
         Process complete dataset from CSV files.
@@ -387,9 +391,21 @@ class FinancialDataProcessor:
         
         return instructions
     
-    def tokenize_instructions(self, datasets: DatasetDict) -> DatasetDict:
-        """Tokenize instruction datasets for training."""
-        if not self.tokenizer:
+    def tokenize_instructions(
+        self,
+        datasets: DatasetDict,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
+        max_length: Optional[int] = None,
+    ) -> DatasetDict:
+        """Tokenize instruction datasets for training.
+
+        Args:
+            datasets: Instruction-formatted datasets to tokenize
+            tokenizer: Optional tokenizer override
+            max_length: Optional maximum token length to enforce
+        """
+        tk = tokenizer or self.tokenizer
+        if tk is None:
             raise ValueError("Tokenizer required for tokenization")
         
         def tokenize_function(examples):
@@ -403,11 +419,16 @@ class FinancialDataProcessor:
                 prompts.append(prompt)
             
             # Tokenize
-            tokenized = self.tokenizer(
+            # Determine an effective max length. Some models expose extremely large
+            # defaults (e.g., 1e30). Prefer an explicit override when provided.
+            reported_max_len = int(getattr(tk, "model_max_length", 2048))
+            effective_max_len = int(max_length) if max_length is not None else min(reported_max_len, 8192)
+
+            tokenized = tk(
                 prompts,
                 truncation=True,
                 padding=False,
-                max_length=self.tokenizer.model_max_length,
+                max_length=effective_max_len,
                 return_overflowing_tokens=False,
             )
             
@@ -446,14 +467,15 @@ class FinancialDataProcessor:
         
         logger.info(f"Processed data saved to {output_path}")
     
-    def create_data_collator(self):
+    def create_data_collator(self, tokenizer: Optional[PreTrainedTokenizer] = None):
         """Create appropriate data collator for the model."""
         from transformers import DataCollatorForLanguageModeling
         
-        if not self.tokenizer:
+        tk = tokenizer or self.tokenizer
+        if tk is None:
             raise ValueError("Tokenizer required for data collator")
         
         return DataCollatorForLanguageModeling(
-            tokenizer=self.tokenizer,
+            tokenizer=tk,
             mlm=False,  # We're doing causal LM, not masked LM
         )

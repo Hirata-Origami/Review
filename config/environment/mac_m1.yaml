@@ -34,6 +34,10 @@ model:
     rank: 8  # Smaller rank to reduce memory usage
     alpha: 16
     dropout: 0.05
+  
+  # Disable quantization for Mac M1 (not supported)
+  quantization:
+    enabled: false
 
 data:
   # Use local paths (user should adjust)
@@ -70,7 +74,10 @@ mac_m1:
   # Performance settings
   use_mps_fallback: true  # Fallback to CPU for unsupported ops
   optimize_for_memory: true
+  disable_unsloth: true  # Unsloth causes CUDA errors on Mac M1
+  disable_quantization: true  # Quantization not supported on MPS
   
   # Training optimizations
   use_cpu_offload: false  # Unified memory makes this less beneficial
   prefer_smaller_models: true
+  use_smaller_batch_sizes: true

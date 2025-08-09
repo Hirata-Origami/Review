@@ -10,16 +10,17 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from omegaconf import OmegaConf, DictConfig
-from src.utils import logger
 import torch
 from rich.console import Console
+from ..utils.logger import get_logger
 
 console = Console()
+logger = get_logger(__name__)
 
 @dataclass
 class ModelConfig:
     """Model configuration parameters"""
-    base_model: str = "unsloth/Meta-Llama-3-8B-bnb-4bit"
+    base_model: str = "unsloth/llama-3-8b-bnb-4bit"
     model_family: str = "llama3"
     max_sequence_length: int = 2048
     quantization_enabled: bool = True
@@ -48,10 +49,16 @@ class TrainingConfig:
     per_device_train_batch_size: int = 4
     per_device_eval_batch_size: int = 8
     gradient_accumulation_steps: int = 4
+    eval_accumulation_steps: int = 1
     
     gradient_checkpointing: bool = True
     fp16: bool = True
     bf16: bool = False
+    
+    # Data loading
+    dataloader_num_workers: int = 4
+    dataloader_pin_memory: bool = True
+    remove_unused_columns: bool = False
     
     evaluation_strategy: str = "steps"
     eval_steps: int = 500
@@ -60,6 +67,9 @@ class TrainingConfig:
     save_total_limit: int = 3
     
     logging_steps: int = 100
+    
+    # Optimizer selection (overridden automatically on CUDA with bitsandbytes)
+    optim: str = "adamw_torch"
 
 @dataclass
 class DataConfig:
@@ -211,6 +221,7 @@ class ConfigManager:
             per_device_train_batch_size=self.config.training.per_device_train_batch_size,
             per_device_eval_batch_size=self.config.training.per_device_eval_batch_size,
             gradient_accumulation_steps=self.config.training.gradient_accumulation_steps,
+            eval_accumulation_steps=getattr(self.config.training, "eval_accumulation_steps", 1),
             gradient_checkpointing=self.config.training.gradient_checkpointing,
             fp16=self.config.training.fp16,
             bf16=self.config.training.bf16,
@@ -219,7 +230,11 @@ class ConfigManager:
             save_strategy=self.config.training.save_strategy,
             save_steps=self.config.training.save_steps,
             save_total_limit=self.config.training.save_total_limit,
-            logging_steps=self.config.training.logging_steps
+            logging_steps=self.config.training.logging_steps,
+            dataloader_num_workers=getattr(self.config.training, "dataloader_num_workers", 4),
+            dataloader_pin_memory=getattr(self.config.training, "dataloader_pin_memory", True),
+            remove_unused_columns=getattr(self.config.training, "remove_unused_columns", False),
+            optim=getattr(self.config.training, "optim", "adamw_torch"),
         )
     
     def get_data_config(self) -> DataConfig:

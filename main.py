@@ -282,14 +282,26 @@ class FinancialLLMOrchestrator:
             model_config = self.config_manager.get_model_config()
             self.model_adapter = LlamaFinancialAdapter(model_config)
             
-            # Load base model
-            model, tokenizer = self.model_adapter.load_base_model()
+            # Load base model (disable unsloth for Mac M1)
+            use_unsloth = not (self.config_manager.environment == "mac_m1")
+            model, tokenizer = self.model_adapter.load_base_model(use_unsloth=use_unsloth)
+
+            # Ensure the data processor has access to the tokenizer
+            if hasattr(self.data_processor, "set_tokenizer"):
+                self.data_processor.set_tokenizer(tokenizer)
+            else:
+                # Fallback: directly assign attribute to prevent None tokenizer issues
+                self.data_processor.tokenizer = tokenizer
             
             # Setup LoRA adaptation
             peft_model = self.model_adapter.setup_lora_adaptation()
             
-            # Tokenize datasets
-            tokenized_datasets = self.data_processor.tokenize_instructions(self.datasets)
+            # Tokenize datasets with explicit tokenizer and max length
+            tokenized_datasets = self.data_processor.tokenize_instructions(
+                self.datasets,
+                tokenizer=tokenizer,
+                max_length=model_config.max_sequence_length,
+            )
             
             # Initialize trainer
             training_config = self.config_manager.get_training_config()
@@ -306,8 +318,8 @@ class FinancialLLMOrchestrator:
                 eval_dataset_size=len(tokenized_datasets['validation'])
             )
             
-            # Create data collator
-            data_collator = self.data_processor.create_data_collator()
+            # Create data collator with explicit tokenizer
+            data_collator = self.data_processor.create_data_collator(tokenizer=tokenizer)
             
             # Create trainer instance
             trainer_instance = self.trainer.create_trainer(

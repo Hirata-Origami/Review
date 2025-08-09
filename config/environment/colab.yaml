@@ -13,6 +13,7 @@ training:
   per_device_train_batch_size: 2
   per_device_eval_batch_size: 4
   gradient_accumulation_steps: 8
+  eval_accumulation_steps: 2
   dataloader_num_workers: 2  # Colab has limited CPU cores
   
   # More frequent checkpointing due to session timeouts
@@ -24,6 +25,9 @@ training:
   gradient_checkpointing: true
   fp16: true
   bf16: false
+  remove_unused_columns: false
+  # Let trainer auto-select 8-bit optimizer on CUDA if bitsandbytes is present
+  optim: adamw_torch
 
 model:
   # Reasonable sequence length for Colab

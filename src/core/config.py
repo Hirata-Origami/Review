@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Union
 from dataclasses import dataclass, field
 from omegaconf import OmegaConf, DictConfig
+from src.utils import logger
 import torch
 from rich.console import Console
 
@@ -258,7 +259,18 @@ class ConfigManager:
     def get_device(self) -> torch.device:
         """Get the appropriate device for computation."""
         if self.config.hardware.device == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            if torch.cuda.is_available():
+                return torch.device("cuda")
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return torch.device("mps")
+            else:
+                return torch.device("cpu")
+        elif self.config.hardware.device == "mps":
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return torch.device("mps")
+            else:
+                logger.warning("MPS not available, falling back to CPU")
+                return torch.device("cpu")
         return torch.device(self.config.hardware.device)
     
     def save_config(self, path: Optional[Union[str, Path]] = None) -> None:

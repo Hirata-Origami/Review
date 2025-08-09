@@ -121,6 +121,11 @@ class LlamaFinancialAdapter:
     def _load_with_unsloth(self) -> Tuple[nn.Module, AutoTokenizer]:
         """Load model using Unsloth optimization."""
         try:
+            # Unsloth works best with CUDA
+            if self.device.type != "cuda":
+                logger.warning("Unsloth optimization requires CUDA. Falling back to transformers.")
+                return self._load_with_transformers()
+            
             model, tokenizer = FastLanguageModel.from_pretrained(
                 model_name=self.config.base_model,
                 max_seq_length=self.config.max_sequence_length,
@@ -138,15 +143,17 @@ class LlamaFinancialAdapter:
     
     def _load_with_transformers(self) -> Tuple[nn.Module, AutoTokenizer]:
         """Load model using standard transformers library."""
-        # Configure quantization
+        # Configure quantization (only for CUDA)
         quantization_config = None
-        if self.config.quantization_enabled:
+        if self.config.quantization_enabled and self.device.type == "cuda":
             quantization_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=getattr(torch, self.config.compute_dtype, torch.float16),
             )
+        elif self.config.quantization_enabled and self.device.type != "cuda":
+            logger.warning("Quantization not supported on this device. Disabling quantization.")
         
         # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(
@@ -160,15 +167,30 @@ class LlamaFinancialAdapter:
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.pad_token_id = tokenizer.eos_token_id
         
+        # Determine device map and dtype based on device
+        if self.device.type == "cuda":
+            device_map = "auto"
+            torch_dtype = getattr(torch, self.config.compute_dtype, torch.float16)
+        elif self.device.type == "mps":
+            device_map = None  # MPS doesn't support device_map="auto"
+            torch_dtype = torch.float32  # MPS works better with float32
+        else:
+            device_map = None
+            torch_dtype = torch.float32
+        
         # Load model
         model = AutoModelForCausalLM.from_pretrained(
             self.config.base_model,
             quantization_config=quantization_config,
-            device_map="auto" if self.device.type == "cuda" else None,
+            device_map=device_map,
             trust_remote_code=True,
-            torch_dtype=getattr(torch, self.config.compute_dtype, torch.float16),
+            torch_dtype=torch_dtype,
             attn_implementation="flash_attention_2" if self._supports_flash_attention() else None
         )
+        
+        # Move to device if not using device_map
+        if device_map is None:
+            model = model.to(self.device)
         
         # Prepare for k-bit training if quantized
         if quantization_config:

@@ -1,0 +1,73 @@
+# @package _global_
+# Google Colab-specific configuration overrides
+
+# Hardware optimizations for Colab
+hardware:
+  device: "cuda"
+  mixed_precision: true
+  use_flash_attention: false  # May not be available in all Colab runtimes
+  compile_model: false  # Disable for compatibility
+
+training:
+  # Optimized for Colab GPU constraints (T4/V100)
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 8
+  dataloader_num_workers: 2  # Colab has limited CPU cores
+  
+  # More frequent checkpointing due to session timeouts
+  save_steps: 250
+  eval_steps: 125
+  logging_steps: 25
+  
+  # Enable optimizations
+  gradient_checkpointing: true
+  fp16: true
+  bf16: false
+
+model:
+  # Reasonable sequence length for Colab
+  max_sequence_length: 1024
+  
+  # Standard LoRA settings
+  lora:
+    rank: 16
+    alpha: 32
+    dropout: 0.1
+
+data:
+  # Colab dataset paths (adjust as needed)
+  train_path: "./Train dataset.csv"
+  val_path: "./Val dataset.csv"
+  
+  # Limit samples for faster experimentation
+  max_samples: 10000
+
+output:
+  base_dir: "/content/outputs"  # Colab working directory
+
+evaluation:
+  # Reduced for faster execution
+  quick_eval_samples: 100
+  full_eval_samples: 500
+  qualitative_eval_samples: 15
+
+monitoring:
+  wandb:
+    enabled: true  # Colab supports W&B well
+  tensorboard:
+    enabled: true
+    log_dir: "/content/outputs/logs/tensorboard"
+
+# Colab-specific settings
+colab:
+  session_timeout_hours: 12
+  auto_save_interval: 1800  # 30 minutes
+  mount_drive: false  # Set to true if using Google Drive
+  
+  # Memory management for Colab
+  aggressive_cleanup: true
+  cleanup_frequency: 100
+  
+  # Prevent disconnection
+  keep_alive: true

@@ -212,9 +212,14 @@ class LoggerManager:
     
     def log_system_info(self):
         """Log system information at startup."""
-        import torch
-        import platform
-        import psutil
+        try:
+            import torch
+            import platform
+            import psutil
+        except ImportError as e:
+            logger = self.get_logger('system')
+            logger.warning(f"Cannot import required modules for system info: {e}")
+            return
         
         system_info = {
             'platform': platform.platform(),

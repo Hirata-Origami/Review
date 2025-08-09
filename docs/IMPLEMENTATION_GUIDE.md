@@ -17,7 +17,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/financial-llm-framework.git
+git clone https://github.com/Hirata-Origami/financial-llm-framework.git
 cd financial-llm-framework
 
 # Install dependencies
@@ -102,7 +102,7 @@ docker run --gpus all -v $(pwd):/workspace -it financial-llm:latest
 **Option C: Google Colab**
 ```python
 # In Colab notebook
-!git clone https://github.com/your-org/financial-llm-framework.git
+!git clone https://github.com/Hirata-Origami/financial-llm-framework.git
 %cd financial-llm-framework
 !pip install -r requirements.txt
 

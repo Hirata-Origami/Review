@@ -363,12 +363,22 @@ class FinancialLLMEvaluator:
         tokenizer = model_adapter.tokenizer
         
         # Create generation pipeline
+        if model_adapter.device.type == "cuda":
+            device_arg = model_adapter.device.index if hasattr(model_adapter.device, 'index') else 0
+            torch_dtype = torch.float16
+        elif model_adapter.device.type == "mps":
+            device_arg = -1  # Use CPU for pipeline, model is already on MPS
+            torch_dtype = torch.float32
+        else:
+            device_arg = -1
+            torch_dtype = torch.float32
+            
         generator = pipeline(
             "text-generation",
             model=model,
             tokenizer=tokenizer,
-            device=model_adapter.device.index if model_adapter.device.type == "cuda" else -1,
-            torch_dtype=torch.float16 if model_adapter.device.type == "cuda" else torch.float32
+            device=device_arg,
+            torch_dtype=torch_dtype
         )
         
         predictions = []

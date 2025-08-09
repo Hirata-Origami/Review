@@ -6,14 +6,26 @@ GPU and CPU memory usage during LLM training and inference.
 """
 
 import gc
-import torch
-import psutil
 import threading
 import time
 from typing import Dict, Optional, Any, List
 from dataclasses import dataclass
 from contextlib import contextmanager
 import warnings
+
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+    psutil = None
 
 from .logger import get_logger
 
@@ -216,14 +228,22 @@ class MemoryManager:
             cleanup_threshold: Memory threshold for automatic cleanup
             enable_monitoring: Enable background monitoring
         """
+        if not PSUTIL_AVAILABLE:
+            logger.warning("psutil not available, memory monitoring will be limited")
+            enable_monitoring = False
+            
         self.auto_cleanup = auto_cleanup
         self.cleanup_threshold = cleanup_threshold
         
-        self.monitor = MemoryMonitor() if enable_monitoring else None
+        self.monitor = MemoryMonitor() if enable_monitoring and PSUTIL_AVAILABLE else None
         self.cleanup_count = 0
         
         if enable_monitoring and self.monitor:
-            self.monitor.start_monitoring()
+            try:
+                self.monitor.start_monitoring()
+            except Exception as e:
+                logger.warning(f"Failed to start memory monitoring: {e}")
+                self.monitor = None
         
         logger.info(f"Memory manager initialized (auto_cleanup={auto_cleanup})")
     

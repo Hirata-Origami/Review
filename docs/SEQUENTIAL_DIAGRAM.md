@@ -1,3 +1,4 @@
+```mermaid
 sequenceDiagram
     participant User
     participant Orchestrator as FinancialLLMOrchestrator
@@ -79,3 +80,4 @@ sequenceDiagram
     end
     
     Orchestrator-->>User: pipeline_results
+```

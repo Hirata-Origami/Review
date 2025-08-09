@@ -1,0 +1,76 @@
+# @package _global_
+# Mac M1 Pro 16GB-specific configuration optimizations
+
+# Hardware constraints for Mac M1 Pro with 16GB unified memory
+hardware:
+  device: "mps"  # Use Metal Performance Shaders for M1
+  mixed_precision: false  # MPS doesn't support full mixed precision yet
+  use_flash_attention: false  # Not available on MPS
+  compile_model: false  # Disable compilation for compatibility
+
+training:
+  # Optimized for M1 Pro 16GB memory constraints
+  per_device_train_batch_size: 1  # Very small due to memory constraints
+  per_device_eval_batch_size: 2
+  gradient_accumulation_steps: 16  # Larger to maintain effective batch size
+  dataloader_num_workers: 4  # M1 Pro has 8 performance cores
+  
+  # More conservative settings for stability
+  fp16: false  # Use default precision on MPS
+  bf16: false
+  gradient_checkpointing: true  # Essential for memory savings
+  
+  # More frequent checkpointing due to longer training times
+  save_steps: 250
+  eval_steps: 125
+  logging_steps: 25
+
+model:
+  # Reduced sequence length for memory efficiency
+  max_sequence_length: 1024
+  
+  # Conservative LoRA settings
+  lora:
+    rank: 8  # Smaller rank to reduce memory usage
+    alpha: 16
+    dropout: 0.05
+
+data:
+  # Use local paths (user should adjust)
+  train_path: "./Train dataset.csv"
+  val_path: "./Val dataset.csv"
+  
+  # More aggressive sampling for memory constraints
+  max_samples: 5000  # Limit dataset size
+  
+  preprocessing:
+    max_transcript_length: 512  # Shorter sequences
+
+output:
+  base_dir: "./outputs"
+
+evaluation:
+  # Reduced evaluation for memory efficiency
+  quick_eval_samples: 50
+  full_eval_samples: 200
+  qualitative_eval_samples: 10
+
+monitoring:
+  wandb:
+    enabled: true  # Mac has good internet typically
+  tensorboard:
+    enabled: true
+
+# Mac M1-specific optimizations
+mac_m1:
+  # Memory management
+  aggressive_memory_cleanup: true
+  cleanup_interval: 50  # Clean every 50 steps
+  
+  # Performance settings
+  use_mps_fallback: true  # Fallback to CPU for unsupported ops
+  optimize_for_memory: true
+  
+  # Training optimizations
+  use_cpu_offload: false  # Unified memory makes this less beneficial
+  prefer_smaller_models: true

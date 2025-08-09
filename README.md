@@ -34,7 +34,7 @@ An enterprise-grade framework for fine-tuning large language models on financial
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/financial-llm-framework.git
+git clone https://github.com/Hirata-Origami/financial-llm-framework.git
 cd financial-llm-framework
 
 # Install dependencies

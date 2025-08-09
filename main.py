@@ -7,7 +7,7 @@ with comprehensive monitoring, evaluation, and deployment capabilities.
 This is the main entry point for the financial LLM fine-tuning framework,
 designed to handle the complete pipeline from data processing to model deployment.
 
-Author: Financial AI Team
+Author: Bharath Pranav S
 Version: 1.0.0
 """
 
@@ -36,6 +36,42 @@ from src.utils.validators import DataValidator
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+def check_dependencies():
+    """Check if all required dependencies are available."""
+    missing_deps = []
+    
+    try:
+        import torch
+        print(f"✓ PyTorch {torch.__version__} available")
+    except ImportError:
+        missing_deps.append("torch")
+    
+    try:
+        import transformers
+        print(f"✓ Transformers {transformers.__version__} available")
+    except ImportError:
+        missing_deps.append("transformers")
+    
+    try:
+        import datasets
+        print(f"✓ Datasets available")
+    except ImportError:
+        missing_deps.append("datasets")
+    
+    try:
+        import pandas
+        print(f"✓ Pandas {pandas.__version__} available")
+    except ImportError:
+        missing_deps.append("pandas")
+    
+    if missing_deps:
+        print(f"❌ Missing dependencies: {missing_deps}")
+        print("Please install them with: pip install " + " ".join(missing_deps))
+        return False
+    
+    print("✓ All core dependencies available")
+    return True
+
 class FinancialLLMOrchestrator:
     """
     Main orchestrator for the financial LLM fine-tuning pipeline.
@@ -58,7 +94,7 @@ class FinancialLLMOrchestrator:
         
         Args:
             config_path: Path to configuration file
-            environment: Environment name (local, kaggle, colab, production)
+            environment: Environment name (local, kaggle, colab, production, mac_m1)
             log_dir: Directory for logs (auto-generated if None)
             wandb_project: Weights & Biases project name
         """
@@ -74,12 +110,24 @@ class FinancialLLMOrchestrator:
         
         self.logger.info("Initializing Financial LLM Orchestrator...")
         
-        # Initialize configuration
-        self.config_manager = get_config_manager(config_path, environment)
-        self.config_manager.print_config()
+        try:
+            # Initialize configuration
+            self.config_manager = get_config_manager(config_path, environment)
+            self.logger.info("Configuration loaded successfully")
+            self.config_manager.print_config()
+        except Exception as e:
+            self.logger.error(f"Failed to load configuration: {e}", exc_info=True)
+            raise
         
         # Initialize components
-        self.memory_manager = MemoryManager(auto_cleanup=True, enable_monitoring=True)
+        try:
+            self.memory_manager = MemoryManager(auto_cleanup=True, enable_monitoring=True)
+            self.logger.info("Memory manager initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize memory manager: {e}", exc_info=True)
+            # Continue without memory manager
+            self.memory_manager = None
+            
         self.data_processor = None
         self.model_adapter = None
         self.trainer = None
@@ -480,6 +528,9 @@ Examples:
   # Run with Kaggle environment
   python main.py --environment kaggle --wandb-project financial-llm
   
+  # Run with Mac M1 Pro optimization
+  python main.py --environment mac_m1 --wandb-project financial-llm
+  
   # Quick evaluation only
   python main.py --quick-eval --no-train
         """
@@ -495,7 +546,7 @@ Examples:
         "--environment", "-e",
         type=str,
         default="local",
-        choices=["local", "kaggle", "colab", "production"],
+        choices=["local", "kaggle", "colab", "production", "mac_m1"],
         help="Environment configuration to use"
     )
     
@@ -551,6 +602,13 @@ Examples:
 
 def main():
     """Main entry point."""
+    print("🚀 Financial LLM Fine-tuning Framework")
+    print("=" * 50)
+    
+    # Check dependencies first
+    if not check_dependencies():
+        return 1
+    
     parser = create_argument_parser()
     args = parser.parse_args()
     
@@ -595,6 +653,8 @@ def main():
         return 130
     except Exception as e:
         print(f"\n❌ Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
 if __name__ == "__main__":

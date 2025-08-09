@@ -1,5 +1,8 @@
 # Core ML/DL Framework
-torch>=2.1.0
+torch==2.7.0
+torchvision==0.22.0
+torchaudio==2.7.0
+fastai==2.8.2
 transformers>=4.36.0
 accelerate>=0.25.0
 peft>=0.7.0

@@ -24,8 +24,8 @@ model:
 
 data:
   # Kaggle dataset paths
-  train_path: "/kaggle/input/spgispeech/train.csv.bz2"
-  val_path: "/kaggle/input/spgispeech/val.csv.bz2"
+  train_path: "/kaggle/input/finance/Review/Train dataset.csv"
+  val_path: "/kaggle/input/finance/Review/Val dataset.csv"
 
 output:
   base_dir: "/kaggle/working/outputs"
